@@ -1,0 +1,165 @@
+---
+title: "Environmental Quality"
+author: "Laolu Idowu"
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+editor: visual
+date: "`r format(Sys.Date(), '%b %d, %Y')`"
+fig-dpi: 700
+echo: false
+warning: false
+message: false
+---
+
+**Introduction**
+
+This document presents an analysis of air and water quality data on a global scale. The dataset we are using is from kaggle and presents information on the air quality air and water levels from many notable cities around the world. The information was collected from user votes of people around the world through Numbeo. This dataset this contains nearly 4000 records. It is important to mention that although a wide range of data from many different cities is used for this dataset, not every city in a country is mentioned so information on an specific state or region is not definitive. Moreover, due to this being a very large dataset, the graphs are filtered with a specific focus on the United States for the sake of this project. This analysis is to uncover patterns and insights into environmental quality indicators, particularly air quality and water pollution levels.
+
+```{r}
+#Installing packages if they are necessary and loading them.
+if (!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse,
+               ggplot2,
+               ggdark,
+               here,
+               hrbrthemes,
+               scales,
+               update = FALSE)
+```
+
+```{r}
+
+# Read the CSV file into an R data frame using 'here'
+air_quality_data <- read.csv(here("cities_air_quality_water_pollution.csv"), 
+                             header = TRUE, 
+                             stringsAsFactors = FALSE, 
+                             na.strings = "")
+
+# Double checking data loaded
+head(air_quality_data)
+
+# Double checking presence of NA values in the 'Region' column
+sum(is.na(air_quality_data$Region))
+
+```
+
+**Data Wrangling**
+
+The data is then prepared for analysis through a series of wrangling steps. This includes standardizing country names, handling missing values in the 'Region' column, and filtering the dataset to focus on the United States. Additionally, the 'AirQuality' variable is categorized into 'Good', 'Moderate', and 'Poor' based on predefined thresholds. The dataset is also rearranged in descending order based on air quality to facilitate easier analysis.
+
+```{r}
+
+air_quality_wrangled <- air_quality_data %>%
+  mutate(Country = str_to_title(str_trim(Country)),  # Standardize country names
+         Region = if_else(is.na(Region), "Unknown", Region)) %>%  # Replace NA in 'Region'
+  filter(Country == "United States Of America") %>%  # Use the standardized country name
+  select(City, Region, AirQuality, WaterPollution) %>%  # Select relevant columns
+  mutate(AirQualityCategory = case_when(  # Categorize 'AirQuality'
+    AirQuality > 75 ~ "Good",
+    AirQuality > 50 ~ "Moderate",
+    TRUE ~ "Poor"
+  )) %>%
+  arrange(desc(AirQuality))  # Arrange by 'AirQuality' in descending order
+
+# Check the results
+head(air_quality_wrangled)
+
+#randomly sample six rows to make sure everthing worked correctly
+sample_n(air_quality_wrangled, 6)
+
+
+```
+
+```{r summary-by-group, echo=TRUE}
+
+# Summarize  data by Country and Region
+summary_by_country_region <- air_quality_data %>%
+  group_by(Country, Region) %>%
+  summarize(
+    AverageAirQuality = mean(AirQuality, na.rm = TRUE),
+    AverageWaterPollution = mean(WaterPollution, na.rm = TRUE),
+    .groups = 'drop'  # drop the grouping structure after summarizing
+  )
+
+# View the summary tibble
+summary_by_country_region
+
+```
+
+```{r water-pollution-us-regions, echo=TRUE, fig.width=10, fig.height=8, dpi=300}
+
+# For this project, let's showcase information for US states. 
+# Filter for United States and summarize data by region.
+# In RStudio preview the data might not be clear but it looks better in the picture from ggsave. 
+us_region_summary <- air_quality_data %>%
+  filter(Country == " United States of America") %>%
+  group_by(Region) %>%
+  summarize(AverageWaterPollution = mean(WaterPollution, na.rm = TRUE)) %>%
+  arrange(desc(AverageWaterPollution))
+
+# Creating and assigning the plot to a variable
+us_water_pollution_plot <- ggplot(us_region_summary, aes(x = reorder(Region, AverageWaterPollution), y = AverageWaterPollution)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  coord_flip() +
+  labs(title = "Average Water Pollution by Region in the US",
+       x = "Region",
+       y = "Average Water Pollution Index")
+
+# Displaying the plot
+us_water_pollution_plot
+
+# Save the plot in the specified directory using 'here'
+ggsave(here("us_water_pollution_plot.png"), plot = us_water_pollution_plot, width = 10, height = 8, dpi = 300)
+
+
+```
+
+Some noticeable trends that arise after analyzing the average water quality in US states include:
+
+-   There's a clear link between higher urban and industrial activities and lower water quality in states.
+
+-   Compared globally, even the poorest water quality in the U.S. is relatively good, with even the highest pollution levels well under 90. This suggests a better overall water quality in the U.S.
+
+```{r air-quality-us-regions, echo=TRUE, fig.width=10, fig.height=8, dpi=300}
+
+
+# Filter for United States and summarize data by region
+us_region_air_quality <- air_quality_data %>%
+  filter(Country == " United States of America") %>%
+  group_by(Region) %>%
+  summarize(AverageAirQuality = mean(AirQuality, na.rm = TRUE)) %>%
+  arrange(desc(AverageAirQuality))
+
+# Creating a dark theme scatter plot focusing on Air Quality in the US
+us_air_quality_plot <- ggplot(us_region_air_quality, aes(x = reorder(Region, -AverageAirQuality), y = AverageAirQuality, color = AverageAirQuality)) +
+  geom_point(size = 3) +
+  scale_color_gradient(low = "red", high = "green") +  # Green to red gradient
+  ggdark::dark_theme_minimal() +
+  coord_flip() +
+  labs(title = "Average Air Quality by Region in the US",
+       x = "Region",
+       y = "Average Air Quality Index",
+       color = "Air Quality Index")
+us_air_quality_plot
+
+# Save the plot using ggsave
+ggsave("us_air_quality_by_region.png", plot = us_air_quality_plot, width = 10, height = 8, dpi = 300)
+
+
+```
+
+Some noticeable trends that arise after analyzing the average air quality in US states include:
+
+-   Once again, there is a clear link between population density and industrialization when it comes to poor air quality.
+
+-   States with more trees tend to exhibit better air quality. This is exemplified by states such as New Hampshire and Alaska, where dense forests contribute to superior air quality.
+
+<!-- -->
+
+-   This dataset focuses mainly on major cities so it provides insights into air main quality trends, but is not all-encompassing. Not every city in america is represented and so the data may be slightly skewed.
+
+**Conclusion**
+
+This document serves as a exploratory analysis of environmental quality data, emphasizing the importance of assessing and understanding air and water pollution levels for better environmental management and policy-making. Although this project was fun and overall very easy, the hardest part about this project was logical way in which the values in the data work. For water pollution, the higher the number the worse the water quality since it is scaled by pollution. For air quality, the higher the number the better the air quality. This initially caused some confusion and logical errors asopposed to syntax errors, but these issues were soon resolved and I soon had a clearer understanding of the data.
